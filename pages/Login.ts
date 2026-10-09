@@ -6,6 +6,7 @@ export class LoginPage {
   readonly loginButton: Locator;
   readonly otpInput: Locator;
   readonly verifyOtpButton: Locator;
+  readonly forgotPasswordLink: Locator;
 
   constructor(page: Page) {
     this.emailOrPhoneInput = page.getByRole("textbox", {
@@ -15,6 +16,9 @@ export class LoginPage {
     this.loginButton = page.getByRole("button", { name: "Login →" });
     this.otpInput = page.getByRole("textbox", { name: "Enter 4-Digit OTP" });
     this.verifyOtpButton = page.getByRole("button", { name: "Verify OTP →" });
+    this.forgotPasswordLink = page.getByText("Forgot password?", {
+      exact: true,
+    });
   }
 
   async login(email: string, password: string) {
