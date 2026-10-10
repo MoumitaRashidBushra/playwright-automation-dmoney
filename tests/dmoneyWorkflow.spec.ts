@@ -11,6 +11,7 @@ import { PasswordResetPage } from "../pages/PasswordReset";
 import { SignupPage, UserModel } from "../pages/Signup";
 import { SystemDepositPage } from "../pages/SystemDeposit";
 import { GmailClient } from "../utils/gmail";
+import { SUITES } from "../utils/suites";
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
@@ -666,3 +667,125 @@ test("Dmoney Playwright Automation Workflow", async ({ page, request }) => {
     await page.context().storageState({ path: "auth.json" });
   });
 });
+
+test(
+  "Dmoney Positive Smoke Workflow",
+  { tag: SUITES.smoke },
+  async ({ page, request }) => {
+    test.setTimeout(360000);
+
+    const user: UserModel = {
+      fullName: faker.person.fullName(),
+      email: `moumitarashidsv+${generateRandomNumber(10000000, 99999999)}@gmail.com`,
+      phoneNumber: `0150${generateRandomNumber(1000000, 9999999)}`,
+      password: "1234",
+      nidInput: `199${generateRandomNumber(1000000, 9999999)}`,
+      accountType: "Agent",
+    };
+    const signupPage = new SignupPage(page);
+    const loginPage = new LoginPage(page);
+    const customerPhones = [
+      "01815653690",
+      "01815653691",
+      "01815653692",
+      "01815653694",
+    ];
+
+    await page.goto("/register");
+    await signupPage.createUser(user);
+    await expect(
+      page.getByText(
+        "Registration successful. Your account is pending approval by an admin.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await expect(page).toHaveURL(/\/login$/, { timeout: 15000 });
+
+    await loginPage.login("admin@dmoney.com", "1234");
+    await expect(page).toHaveURL(/\/profile$/, { timeout: 15000 });
+    await page.goto("/admin/users");
+    const adminUsersPage = new AdminUsersPage(page);
+    const agentRow = await adminUsersPage.searchByEmail(user.email);
+    await expect(agentRow).toContainText("PENDING");
+    await agentRow.getByRole("button", { name: "View" }).click();
+    await expect(page).toHaveURL(/\/admin\/users\/\d+$/);
+    await adminUsersPage.activateUser();
+    await expect(page.getByText("ACTIVE", { exact: true })).toBeVisible();
+    await adminUsersPage.logout();
+    await expect(page).toHaveURL(/\/login$/, { timeout: 15000 });
+
+    await loginPage.login("system@dmoney.com", "1234");
+    await expect(page).toHaveURL(/\/profile$/, { timeout: 15000 });
+    await page.goto("/agent/cash-in");
+    const systemDepositPage = new SystemDepositPage(page);
+    await systemDepositPage.depositToAgent(user.phoneNumber, 2000);
+    await expect(
+      page.getByText("SYSTEM deposit to Agent successful", { exact: true }),
+    ).toBeVisible();
+    await systemDepositPage.logout();
+    await expect(page).toHaveURL(/\/login$/, { timeout: 15000 });
+
+    const otpRequestedAt = Date.now();
+    await loginPage.login(user.email, user.password);
+    await expect(
+      page.getByText("Verify Your Identity", { exact: true }),
+    ).toBeVisible();
+    const otp = await new GmailClient(request).waitForOtp(
+      otpRequestedAt,
+      user.email,
+    );
+    await loginPage.submitOtp(otp);
+    await expect(page).toHaveURL(/\/profile$/, { timeout: 15000 });
+    const agentBalance = page.getByRole("textbox", {
+      name: "Current Balance (BDT)",
+    });
+    await expect(agentBalance).toHaveValue("2000.00");
+
+    await page.goto("/agent/cash-in");
+    const agentCashInPage = new AgentCashInPage(page);
+    const successMessage = page.getByText("Deposit successful", {
+      exact: true,
+    });
+    const cashInError = page.getByRole("alert").filter({ hasText: /\S/ });
+    let successfulCustomerPhone = "";
+
+    for (const customerPhone of customerPhones) {
+      await agentCashInPage.cashIn(customerPhone, 500);
+      let outcome: "success" | "error";
+      try {
+        outcome = await Promise.race([
+          successMessage
+            .waitFor({ state: "visible", timeout: 10000 })
+            .then(() => "success" as const),
+          cashInError
+            .waitFor({ state: "visible", timeout: 10000 })
+            .then(() => "error" as const),
+        ]);
+      } catch {
+        throw new Error(
+          `Cash-in outcome is unknown for ${customerPhone}; not retrying to avoid a duplicate transaction.`,
+        );
+      }
+
+      if (outcome === "success") {
+        successfulCustomerPhone = customerPhone;
+        break;
+      }
+
+      const errorText = (await cashInError.innerText()).trim();
+      if (!/daily.{0,30}limit|limit.{0,30}daily/i.test(errorText)) {
+        throw new Error(
+          `Cash-in failed for ${customerPhone} with a non-retryable error: ${errorText}`,
+        );
+      }
+      if (customerPhone !== customerPhones.at(-1)) await page.reload();
+    }
+
+    expect(successfulCustomerPhone).toBeTruthy();
+    await expect(successMessage).toBeVisible();
+    await expect(page.getByText("৳ 500.00", { exact: true })).toBeVisible();
+    await expect(page.getByText("৳ 1512.50", { exact: true })).toBeVisible();
+    await page.goto("/profile");
+    await expect(agentBalance).toHaveValue("1512.50");
+  },
+);
