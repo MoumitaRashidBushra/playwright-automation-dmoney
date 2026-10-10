@@ -15,7 +15,7 @@ export class AdminUsersPage {
     return this.page.getByRole("row").filter({ hasText: email });
   }
 
-  async activateAgent() {
+  async activateUser() {
     await this.page.getByRole("button", { name: "Edit User" }).click();
     await this.page.getByRole("combobox").nth(1).click();
     await this.page
