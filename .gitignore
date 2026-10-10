@@ -1,13 +1,19 @@
 
-# Playwright
+# Dependencies
 node_modules/
+
+# Playwright output
 /test-results/
 /playwright-report/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
-# Auth session
+
+# Local credentials and generated session state
 auth.json
 .env
 .env.*
+
+# Generated test exports
+/self_statement_????-??-??.csv
 

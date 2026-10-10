@@ -657,10 +657,14 @@ test("Dmoney Playwright Automation Workflow", async ({ page, request }) => {
       .join("\n");
     const today = new Date().toISOString().split("T")[0];
     const fileName = `self_statement_${today}.csv`;
-    const csvPath = resolve(process.cwd(), fileName);
+    const csvPath = resolve(process.cwd(), "test-results", fileName);
     await writeFile(csvPath, csvContent, "utf-8");
     const savedCsv = await readFile(csvPath, "utf-8");
     expect(savedCsv).toBe(csvContent);
+    await page.screenshot({
+      path: "docs/assets/regression-test-result.png",
+      fullPage: true,
+    });
   });
 
   await test.step("Save Auth State", async () => {
@@ -668,10 +672,8 @@ test("Dmoney Playwright Automation Workflow", async ({ page, request }) => {
   });
 });
 
-test(
-  "Dmoney Positive Smoke Workflow",
-  { tag: SUITES.smoke },
-  async ({ page, request }) => {
+test.describe("Smoke Suite - Positive Scenarios", { tag: SUITES.smoke }, () =>
+  test("Dmoney Positive Smoke Workflow", async ({ page, request }) => {
     test.setTimeout(360000);
 
     const user: UserModel = {
@@ -787,5 +789,9 @@ test(
     await expect(page.getByText("৳ 1512.50", { exact: true })).toBeVisible();
     await page.goto("/profile");
     await expect(agentBalance).toHaveValue("1512.50");
-  },
+    await page.screenshot({
+      path: "docs/assets/smoke-test-result.png",
+      fullPage: true,
+    });
+  }),
 );
